@@ -1,0 +1,66 @@
+DAY 10
+Problem Statement
+
+The production support team of xFusionCorp Industries is working on developing some bash scripts to automate different day to day tasks. One is to create a bash script for taking websites backup. They have a static website running on App Server 2 in Stratos Datacenter, and they need to create a bash script named beta_backup.sh which should accomplish the following tasks. (Also remember to place the script under /scripts directory on App Server 2).
+
+a. Create a zip archive named xfusioncorp_beta.zip of /var/www/html/beta directory.	
+
+b. Save the archive in /backup/ on App Server 2. This is a temporary storage, as backups from this location will be clean on weekly basis. Therefore, we also need to save this backup archive on Nautilus Backup Server.
+
+c. Copy the created archive to Nautilus Backup Server server in /backup/ location.
+
+d. Please make sure script won't ask for password while copying the archive file. Additionally, the respective server user (for example, tony in case of App Server 1) must be able to run it.
+
+e. Do not use sudo inside the script.
+
+Note:
+The zip package must be installed on given App Server before executing the script. This package is essential for creating the zip archive of the website files. Install it manually outside the script.
+=================================================================================================================
+
+Step 1: Install zip package (if not already installed)
+
+[steve@stapp02 ~]$ sudo yum list installed zip			>>> check if zip is installed or not
+[steve@stapp02 ~]$ sudo yum install zip -y			    >>> to install zip
+
+Step 2: Set up SSH key for password-less copy to Nautilus Backup Server
+
+ssh-keygen -t rsa										>>> creating ssh key pair
+
+ssh-copy-id user@<servername or server ip>				>>> will copy the private key destination server
+
+Step 3: Create the beta_backup.sh in /scripts directory in server app2
+
+mkdir -p /backup
+mkdir -p /scripts
+
+
+vi /scripts/beta_backup.sh
+#!/bin/bash
+
+# Variables
+SRC_DIR="/var/www/html/beta"
+BACKUP_DIR="/backup"
+ARCHIVE_NAME="xfusioncorp_beta.zip"
+DEST_SERVER="clint@stbkp01"   # change to actual user@hostname
+DEST_DIR="/backup"
+
+# Step 1: Create local backup archive
+zip -r ${BACKUP_DIR}/${ARCHIVE_NAME} ${SRC_DIR}
+
+# Step 2: Copy archive to Nautilus Backup Server
+scp ${BACKUP_DIR}/${ARCHIVE_NAME} ${DEST_SERVER}:${DEST_DIR}/
+
+# Print status
+if [ $? -eq 0 ]; then
+  echo "Backup completed successfully!"
+else
+  echo "Backup failed!"
+  exit 1
+fi
+
+
+chmod +x /scripts/beta_backup.sh
+
+/scripts/beta_backup.should							>>> run the script
+
+
