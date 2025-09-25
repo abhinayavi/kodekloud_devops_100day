@@ -1,0 +1,127 @@
+Day 12: Linux Network Services
+---------------------------------------
+
+
+Problem Statement
+Apache service on the app server is not reachable on the required port (5000). The issue could be due to:
+
+Apache service not running
+
+Another service using the port
+
+Firewall blocking the port
+
+Apache listening on wrong interface
+
+Goal: Fix the issue so Apache is reachable from the jump host using curl http://stapp01:5000
+
+Diagnostic Steps and Actions
+Step 1: Check Apache Status
+What I did: sudo systemctl status httpd
+
+What I found: Apache failed to start with error:
+
+text
+(98)Address already in use: AH00072: make_sock: could not bind to address 0.0.0.0:5000
+no listening sockets available, shutting down
+Why I did next step: The error indicated another service was already using port 5000, so I needed to identify which service was conflicting.
+
+Step 2: Identify Port Conflict
+What I did: sudo netstat -tulnp | grep 5000
+
+What I found:
+
+text
+tcp        0      0 127.0.0.1:5000          0.0.0.0:*               LISTEN      444/sendmail: accep
+Why I did next step: Sendmail was holding port 5000, preventing Apache from starting. I needed to stop sendmail to free up the port.
+
+Step 3: Stop Conflicting Service
+What I did:
+
+bash
+sudo systemctl stop sendmail
+sudo systemctl disable sendmail
+What I found: Sendmail service stopped successfully.
+
+Why I did next step: With the port now free, I could restart Apache to bind to port 5000.
+
+Step 4: Restart Apache
+What I did:
+
+bash
+sudo systemctl restart httpd
+sudo systemctl enable httpd
+What I found: Apache started successfully.
+
+Why I did next step: Needed to verify Apache was correctly listening on the required port and interface.
+
+Step 5: Verify Apache Listening
+What I did: sudo netstat -tulnp | grep 5000
+
+What I found:
+
+text
+tcp        0      0 0.0.0.0:5000            0.0.0.0:*               LISTEN      1229/httpd
+Why I did next step: Apache was listening correctly on 0.0.0.0:5000, but the service might still be blocked by firewall.
+
+Step 6: Check Firewall Status
+What I did: sudo systemctl status firewalld
+
+What I found: Unit firewalld.service could not be found - firewalld not installed/running.
+
+Why I did next step: Since firewalld wasn't running, I needed to check if iptables (legacy firewall) was blocking the port.
+
+Step 7: Check iptables Rules
+What I did: sudo iptables -L -n
+
+What I found:
+
+text
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+ACCEPT     tcp  --  0.0.0.0/0            0.0.0.0/0            state NEW tcp dpt:22
+REJECT     all  --  0.0.0.0/0            0.0.0.0/0            reject-with icmp-host-prohibited
+Why I did next step: iptables was rejecting all traffic except SSH (port 22). I needed to explicitly allow port 5000.
+
+Step 8: Allow Port in Firewall
+What I did:
+
+bash
+sudo iptables -I INPUT -p tcp --dport 5000 -j ACCEPT
+sudo iptables-save | sudo tee /etc/sysconfig/iptables
+sudo systemctl restart iptables
+What I found: Port 5000 successfully added to iptables rules.
+
+Why I did next step: Needed to verify the rule was applied correctly.
+
+Step 9: Verify Firewall Rule
+What I did: sudo iptables -L -n | grep 5000
+
+What I found:
+
+text
+ACCEPT     tcp  --  0.0.0.0/0    0.0.0.0/0    tcp dpt:5000
+Why I did next step: With all configurations correct, I needed to test connectivity from the jump host.
+
+Step 10: Final Test
+What I did: From jump host: curl http://stapp01:5000
+
+What I found: Apache welcome page loaded successfully.
+
+Summary
+Root Cause: Two issues:
+
+Port conflict: Sendmail service was using port 5000
+
+Firewall blocking: iptables was rejecting connections to port 5000
+
+Solution Applied:
+
+Stopped and disabled sendmail service
+
+Added iptables rule to allow port 5000
+
+Restarted Apache service
+
+Verification: Apache now accessible on port 5000 from external hosts.
+
